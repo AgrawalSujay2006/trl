@@ -1537,9 +1537,12 @@ class SDPOTrainer(_BaseTrainer):
             metrics[key] = sum(valid) / len(valid) if valid else None
 
         # This method can be called both in training and evaluation. When called in evaluation, the keys in `logs`
-        # start with "eval_". We need to add the prefix "eval_" to the keys in `metrics` to match the format.
+        # start with the `metric_key_prefix` passed to `evaluate` ("eval", or "eval_<name>" for each dataset of a dict
+        # `eval_dataset`), and always include "<metric_key_prefix>_runtime". We add the same prefix to the keys in
+        # `metrics`, so that the metrics of each eval dataset are logged and returned under their own names.
         if mode == "eval":
-            metrics = {f"eval_{key}": val for key, val in metrics.items()}
+            prefix = next((key.removesuffix("_runtime") for key in logs if key.endswith("_runtime")), "eval")
+            metrics = {f"{prefix}_{key}": val for key, val in metrics.items()}
 
         logs.update(metrics)
         super().log(logs, start_time)

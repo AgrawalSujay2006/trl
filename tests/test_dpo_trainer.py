@@ -318,6 +318,17 @@ class TestDPOTrainer(TrlTestCase):
         else:
             assert metrics["eval_data1_loss"] is not None
             assert metrics["eval_data2_loss"] is not None
+            # The trainer's own metrics keep the dataset name too, so each dataset's are reported separately.
+            # See https://github.com/huggingface/trl/issues/8307.
+            assert not [
+                key
+                for key in metrics
+                if key.startswith("eval_") and not key.startswith(("eval_data1_", "eval_data2_"))
+            ]
+            data1_keys = {key.removeprefix("eval_data1_") for key in metrics if key.startswith("eval_data1_")}
+            data2_keys = {key.removeprefix("eval_data2_") for key in metrics if key.startswith("eval_data2_")}
+            assert data1_keys == data2_keys
+            assert data1_keys - {"loss", "runtime", "samples_per_second", "steps_per_second"}
 
     def test_evaluate_precompute_ref_log_probs_after_training_raises(self):
         # Full fine-tuning with `precompute_ref_log_probs=True` and no `ref_model` uses `self.model` as the reference.
@@ -1400,6 +1411,30 @@ class TestDPOTrainer(TrlTestCase):
 
         assert trainer.state.log_history[-3]["eval_data1_loss"] is not None
         assert trainer.state.log_history[-2]["eval_data2_loss"] is not None
+
+    def test_train_with_multiple_eval_dataset_metric_for_best_model(self):
+        # `metric_for_best_model` can name a DPO metric of one of several eval datasets. Before the fix, the DPO metrics
+        # were logged without the dataset name, so this raised a `KeyError`. See https://github.com/huggingface/trl/issues/8307.
+        dataset = load_dataset("trl-internal-testing/zen", "conversational_preference")
+
+        training_args = DPOConfig(
+            output_dir=self.tmp_dir,
+            eval_strategy="steps",
+            eval_steps=3,
+            save_strategy="steps",
+            save_steps=3,
+            metric_for_best_model="eval_data1_rewards/accuracies",
+            report_to="none",
+        )
+        trainer = DPOTrainer(
+            model="trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
+            args=training_args,
+            train_dataset=dataset["train"],
+            eval_dataset={"data1": dataset["test"], "data2": dataset["test"]},
+        )
+        trainer.train()
+
+        assert trainer.state.best_metric is not None
 
     @pytest.mark.parametrize("train_dataset_type", ["dataset", "iterable_dataset", "none", "unsupported_dataset_dict"])
     def test_init_with_train_dataset(self, train_dataset_type):

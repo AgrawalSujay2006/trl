@@ -1745,7 +1745,8 @@ class IWOPDTrainer(_BaseTrainer):
             self._on_policy_step_equiv = self._off_policy_step_equiv = 0.0
 
         if mode == "eval":
-            metrics = {f"eval_{key}": val for key, val in metrics.items()}
+            prefix = next((key.removesuffix("_runtime") for key in logs if key.endswith("_runtime")), "eval")
+            metrics = {f"{prefix}_{key}": val for key, val in metrics.items()}
 
         logs.update(metrics)
         super().log(logs, start_time)

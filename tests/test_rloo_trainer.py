@@ -554,6 +554,17 @@ class TestRLOOTrainer(TrlTestCase):
         else:
             assert metrics["eval_data1_loss"] is not None
             assert metrics["eval_data2_loss"] is not None
+            # The trainer's own metrics keep the dataset name too, so each dataset's are reported separately.
+            # See https://github.com/huggingface/trl/issues/8307.
+            assert not [
+                key
+                for key in metrics
+                if key.startswith("eval_") and not key.startswith(("eval_data1_", "eval_data2_"))
+            ]
+            data1_keys = {key.removeprefix("eval_data1_") for key in metrics if key.startswith("eval_data1_")}
+            data2_keys = {key.removeprefix("eval_data2_") for key in metrics if key.startswith("eval_data2_")}
+            assert data1_keys == data2_keys
+            assert data1_keys - {"loss", "runtime", "samples_per_second", "steps_per_second"}
 
     def test_train_multiple_iterations(self):
         dataset = load_dataset("trl-internal-testing/zen", "conversational_prompt_only", split="train")
